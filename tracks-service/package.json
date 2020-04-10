@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "serverless-offline": "^6.1.4"
+  },
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "mongoose": "^5.9.7"
+  }
+}
