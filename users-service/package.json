@@ -3,7 +3,10 @@
     "serverless-offline": "^6.1.4"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "bcryptjs-then": "^1.0.1",
     "dotenv": "^8.2.0",
+    "jsonwebtoken": "^8.5.1",
     "mongoose": "^5.9.7"
   }
 }

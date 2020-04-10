@@ -1,119 +1,144 @@
 require('dotenv').config({ path: './variables.env' });
 const connectToDatabase = require('./database');
-const Track = require('./models/Track');
-
-console.log(connectToDatabase);
-
-console.log(Track);
+const User = require('./models/User');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs-then');
 
 ('use strict');
 
-module.exports.create = (event, context, callback) => {
-  context.callbackWaitsForEmptyEventLoop = false;
+/**
+ * Functions
+ */
 
-  connectToDatabase().then(() => {
-    Track.create(JSON.parse(event.body))
-      .then((note) =>
-        callback(null, {
-          statusCode: 200,
-          body: JSON.stringify(note),
-        })
-      )
-      .catch((err) =>
-        callback(null, {
-          statusCode: err.statusCode || 500,
-          headers: { 'Content-Type': 'text/plain' },
-          body: 'Could not create the Track.',
-        })
-      );
-  });
+module.exports.getUsers = (event, context) => {
+  context.callbackWaitsForEmptyEventLoop = false;
+  return connectToDatabase()
+    .then(getUsers)
+    .then((users) => ({
+      statusCode: 200,
+      body: JSON.stringify(users),
+    }))
+    .catch((err) => ({
+      statusCode: err.statusCode || 500,
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ message: err.message }),
+    }));
 };
 
-module.exports.getOne = (event, context, callback) => {
+module.exports.signIn = (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
-
-  connectToDatabase().then(() => {
-    Track.findById(event.pathParameters.id)
-      .then((note) =>
-        callback(null, {
-          statusCode: 200,
-          body: JSON.stringify(note),
-        })
-      )
-      .catch((err) =>
-        callback(null, {
-          statusCode: err.statusCode || 500,
-          headers: { 'Content-Type': 'text/plain' },
-          body: 'Could not fetch the track.',
-        })
-      );
-  });
+  return connectToDatabase()
+    .then(() => login(JSON.parse(event.body)))
+    .then((session) => ({
+      statusCode: 200,
+      body: JSON.stringify(session),
+    }))
+    .catch((err) => ({
+      statusCode: err.statusCode || 500,
+      headers: { 'Content-Type': 'text/plain' },
+      body: { stack: err.stack, message: err.message },
+    }));
 };
 
-module.exports.getAll = (event, context, callback) => {
+module.exports.signUp = (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
-
-  connectToDatabase().then(() => {
-    Track.find()
-      .then((notes) =>
-        callback(null, {
-          statusCode: 200,
-          body: JSON.stringify(notes),
-        })
-      )
-      .catch((err) =>
-        callback(null, {
-          statusCode: err.statusCode || 500,
-          headers: { 'Content-Type': 'text/plain' },
-          body: 'Could not fetch the notes.',
-        })
-      );
-  });
+  return connectToDatabase()
+    .then(() => signUp(JSON.parse(event.body)))
+    .then((session) => ({
+      statusCode: 200,
+      body: JSON.stringify(session),
+    }))
+    .catch((err) => ({
+      statusCode: err.statusCode || 500,
+      headers: { 'Content-Type': 'text/plain' },
+      body: err.message,
+    }));
 };
 
-module.exports.update = (event, context, callback) => {
-  context.callbackWaitsForEmptyEventLoop = false;
+/**
+ * Helpers
+ */
 
-  connectToDatabase().then(() => {
-    Track.findByIdAndUpdate(event.pathParameters.id, JSON.parse(event.body), {
-      new: true,
-    })
-      .then((note) =>
-        callback(null, {
-          statusCode: 200,
-          body: JSON.stringify(note),
-        })
-      )
-      .catch((err) =>
-        callback(null, {
-          statusCode: err.statusCode || 500,
-          headers: { 'Content-Type': 'text/plain' },
-          body: 'Could not fetch the notes.',
-        })
-      );
+function getUsers() {
+  return User.find({})
+    .then((users) => users)
+    .catch((err) => Promise.reject(new Error(err)));
+}
+
+function signToken(id) {
+  return jwt.sign({ id: id }, process.env.JWT_SECRET, {
+    expiresIn: 86400, // expires in 24 hours
   });
-};
+}
 
-module.exports.delete = (event, context, callback) => {
-  context.callbackWaitsForEmptyEventLoop = false;
-
-  connectToDatabase().then(() => {
-    Track.findByIdAndRemove(event.pathParameters.id)
-      .then((note) =>
-        callback(null, {
-          statusCode: 200,
-          body: JSON.stringify({
-            message: 'Removed note with id: ' + track._id,
-            note: note,
-          }),
-        })
+function checkIfInputIsValid(eventBody) {
+  if (!(eventBody.password && eventBody.password.length >= 7)) {
+    return Promise.reject(
+      new Error(
+        'Password error. Password needs to be longer than 8 characters.'
       )
-      .catch((err) =>
-        callback(null, {
-          statusCode: err.statusCode || 500,
-          headers: { 'Content-Type': 'text/plain' },
-          body: 'Could not fetch the notes.',
+    );
+  }
+
+  if (
+    !(
+      eventBody.name &&
+      eventBody.name.length > 5 &&
+      typeof eventBody.name === 'string'
+    )
+  )
+    return Promise.reject(
+      new Error('Username error. Username needs to longer than 5 characters')
+    );
+
+  if (!(eventBody.email && typeof eventBody.name === 'string'))
+    return Promise.reject(
+      new Error('Email error. Email must have valid characters.')
+    );
+
+  return Promise.resolve();
+}
+
+function signUp(eventBody) {
+  return checkIfInputIsValid(eventBody) // validate input
+    .then(
+      () => User.findOne({ email: eventBody.email }) // check if user exists
+    )
+    .then(
+      (user) =>
+        user
+          ? Promise.reject(new Error('User with that email exists.'))
+          : bcrypt.hash(eventBody.password, 8) // hash the pass
+    )
+    .then(
+      (hash) =>
+        User.create({
+          name: eventBody.name,
+          email: eventBody.email,
+          password: hash,
         })
-      );
-  });
-};
+      // create the new user
+    )
+    .then((user) => ({ auth: true, token: signToken(user._id) }));
+  // sign the token and send it back
+}
+
+function login(eventBody) {
+  return User.findOne({ email: eventBody.email })
+    .then((user) =>
+      !user
+        ? Promise.reject(new Error('User with that email does not exits.'))
+        : comparePassword(eventBody.password, user.password, user._id)
+    )
+    .then((token) => ({ auth: true, token: token }));
+}
+
+function comparePassword(eventPassword, userPassword, userId) {
+  return bcrypt
+    .compare(eventPassword, userPassword)
+    .then((passwordIsValid) =>
+      !passwordIsValid
+        ? Promise.reject(new Error('The credentials do not match.'))
+        : signToken(userId)
+    );
+}

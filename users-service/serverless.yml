@@ -8,41 +8,45 @@ provider:
   stage: dev # setting the env stage to dev, this will be visible in the routes
   region: us-east-1
 
+# custom:
+#   secrets: ${self:custom.secrets.JWT_SECRET}
+
+environment:
+  JWT_SECRET: ${self:custom.secrets.JWT_SECRET}
+  DB: ${self:custom.secrets.DB}
+
 functions: # add 4 functions for CRUD
-  create:
-    handler: handler.create # point to exported create function in handler.js
+  verify-token:
+    handler: middlewares/Auth.auth
+  signIn:
+    handler: handler.signIn # point to exported create function in handler.js
     events:
       - http:
-          path: tracks # path will be domain.name.com/dev/tracks
+          path: sign-in # path will be domain.name.com/dev/tracks
           method: post
           cors: true
-  getOne:
-    handler: handler.getOne
+  signUp:
+    handler: handler.signUp # point to exported create function in handler.js
     events:
       - http:
-          path: tracks/{id} # path will be domain.name.com/dev/tracks/1
+          path: sign-up # path will be domain.name.com/dev/tracks
+          method: post
+          cors: true
+  user:
+    handler: handler.user
+    events:
+      - http:
+          path: user
           method: get
           cors: true
-  getAll:
-    handler: handler.getAll # path will be domain.name.com/dev/tracks
+          authorizer: verify-token
+
+  getUsers:
+    handler: handler.getUsers
     events:
       - http:
-          path: tracks
+          path: users
           method: get
-          cors: true
-  update:
-    handler: handler.update # path will be domain.name.com/dev/tracks/1
-    events:
-      - http:
-          path: tracks/{id}
-          method: put
-          cors: true
-  delete:
-    handler: handler.delete
-    events:
-      - http:
-          path: tracks/{id} # path will be domain.name.com/dev/tracks/1
-          method: delete
           cors: true
 
 plugins:
